@@ -5,7 +5,8 @@ import SwiftUI
 import Combine
 
 class CameraModel: NSObject, ObservableObject {
-    @Published var capturedImages: [UIImage] = []
+    @Published var leftEyeImages: [UIImage] = []
+    @Published var rightEyeImages: [UIImage] = []
     @Published var debugMessage: String = "Idle"
     @Published var isBusy: Bool = false
     @Published var zoomFactor: CGFloat = 1.0
@@ -14,6 +15,9 @@ class CameraModel: NSObject, ObservableObject {
     private var photoOutput = AVCapturePhotoOutput()
     private var videoDeviceInput: AVCaptureDeviceInput!
     private var isSessionRunning = false
+
+    enum EyeMode { case left, right }
+    @Published var currentEye: EyeMode = .left
     
     override init() {
         super.init()
@@ -85,7 +89,7 @@ class CameraModel: NSObject, ObservableObject {
     func setZoom(_ factor: CGFloat) {
         guard let device = videoDeviceInput?.device else { return }
         let zoom = min(max(factor, 1.0), device.activeFormat.videoMaxZoomFactor)
-        if abs(zoom - lastZoom) < 0.01 { return } // debounce small changes
+        if abs(zoom - lastZoom) < 0.01 { return }
         lastZoom = zoom
         do {
             try device.lockForConfiguration()
@@ -97,8 +101,8 @@ class CameraModel: NSObject, ObservableObject {
         }
     }
     
-    // MARK: - Take Multiple Photos
-    func takeMultiplePhotos(count: Int, interval: TimeInterval) {
+    // MARK: - Take Multiple Photos with torch buffer
+    func takeMultiplePhotos(count: Int, interval: TimeInterval, torchLeadTime: TimeInterval = 0.2, torchLagTime: TimeInterval = 0.3) {
         guard !isBusy else { return }
         guard videoDeviceInput != nil else {
             debugMessage = "Camera input not ready"
@@ -106,14 +110,15 @@ class CameraModel: NSObject, ObservableObject {
         }
         
         isBusy = true
-        capturedImages.removeAll()
         debugMessage = "Preparing capture..."
         print(debugMessage)
         
-        setTorch(on: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + torchLeadTime) { [weak self] in
+            self?.setTorch(on: true)
+        }
         
         for i in 0..<count {
-            let delay = interval * Double(i)
+            let delay = interval * Double(i) + torchLeadTime
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self = self else { return }
                 let settings = AVCapturePhotoSettings()
@@ -124,7 +129,8 @@ class CameraModel: NSObject, ObservableObject {
             }
         }
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + (interval * Double(count))) { [weak self] in
+        let totalDuration = (interval * Double(count)) + torchLeadTime + torchLagTime
+        DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration) { [weak self] in
             guard let self = self else { return }
             self.setTorch(on: false)
             self.isBusy = false
@@ -149,7 +155,12 @@ extension CameraModel: AVCapturePhotoCaptureDelegate {
         }
         
         DispatchQueue.main.async {
-            self.capturedImages.append(uiImage)
+            switch self.currentEye {
+            case .left:
+                self.leftEyeImages.append(uiImage)
+            case .right:
+                self.rightEyeImages.append(uiImage)
+            }
         }
     }
 }

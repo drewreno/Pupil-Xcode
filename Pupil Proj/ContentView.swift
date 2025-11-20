@@ -15,6 +15,25 @@ struct ContentView: View {
                     CameraPreview(camera: camera)
                         .frame(width: geo.size.width,
                                height: geo.size.height * 0.8)
+                        .overlay(
+                            HStack(spacing: 20) {
+                                Button("L") {
+                                    camera.currentEye = .left
+                                }
+                                .padding()
+                                .background(camera.currentEye == .left ? Color.blue.opacity(0.7) : Color.white.opacity(0.7))
+                                .cornerRadius(8)
+                                
+                                Button("R") {
+                                    camera.currentEye = .right
+                                }
+                                .padding()
+                                .background(camera.currentEye == .right ? Color.blue.opacity(0.7) : Color.white.opacity(0.7))
+                                .cornerRadius(8)
+                            }
+                            .padding(.top, 40)
+                            , alignment: .top
+                        )
                 }
                 .onAppear { camera.startSession() }
                 .onDisappear { camera.stopSession() }
@@ -22,10 +41,11 @@ struct ContentView: View {
                 VStack {
                     Spacer()
                     
-                    // Thumbnails
+                    // Thumbnails for current eye
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            ForEach(Array(camera.capturedImages.enumerated()), id: \.offset) { index, img in
+                            let images = camera.currentEye == .left ? camera.leftEyeImages : camera.rightEyeImages
+                            ForEach(Array(images.enumerated()), id: \.offset) { index, img in
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
@@ -42,7 +62,7 @@ struct ContentView: View {
                     // Shutter button
                     HStack {
                         Spacer()
-                        Button(action: { camera.takeMultiplePhotos(count: 6, interval: 0.3) }) {
+                        Button(action: { camera.takeMultiplePhotos(count: 10, interval: 0.3) }) {
                             ZStack {
                                 Circle()
                                     .fill(camera.isBusy ? Color.gray : Color.white)
@@ -54,7 +74,7 @@ struct ContentView: View {
                             }
                         }
                         .disabled(camera.isBusy)
-                        .offset(y: geo.safeAreaInsets.bottom - 30) // pushed further down
+                        .offset(y: geo.safeAreaInsets.bottom - 30)
                         Spacer()
                     }
                     .frame(height: 100)
@@ -64,13 +84,13 @@ struct ContentView: View {
                 if let _ = selectedIndex {
                     GeometryReader { tabGeo in
                         ZStack {
-                            // Dynamic black background
                             Color.black
                                 .opacity(max(0.1, 1 - abs(dragOffset.height) / 300.0))
                                 .edgesIgnoringSafeArea(.all)
                             
                             TabView(selection: $selectedIndex) {
-                                ForEach(Array(camera.capturedImages.enumerated()), id: \.offset) { index, img in
+                                let images = camera.currentEye == .left ? camera.leftEyeImages : camera.rightEyeImages
+                                ForEach(Array(images.enumerated()), id: \.offset) { index, img in
                                     VStack {
                                         Spacer()
                                         Image(uiImage: img)
